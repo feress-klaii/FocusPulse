@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Trained model & generated data (optional — see note below)
+*.joblib
+sensor_log.csv
+labels.csv
+features.csv
+
+# Editor/OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Wokwi cache (if any)
+.wokwi/

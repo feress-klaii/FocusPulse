@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>FocusPulse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;1,500&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  :root {
+    --bg: #12161c;
+    --panel: #181d26;
+    --line: #262d38;
+    --text: #edf0f3;
+    --muted: #8b93a1;
+    --focused: #e8a33d;
+    --distracted: #e8604c;
+    --data: #4fb0a5;
+    --dormant: #4a5160;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) 0;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 48px 24px 32px; }
+  .title { font-family: 'Fraunces', serif; font-style: italic; font-weight: 500; font-size: 28px; margin: 0; letter-spacing: 0.2px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 6px 0 36px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .instrument {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+  }
+  @media (max-width: 640px) {
+    .instrument { grid-template-columns: 1fr; }
+    .instrument > div:first-child { border-right: none !important; border-bottom: 1px solid var(--line); }
+  }
+
+  .vital {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 36px 20px;
+    border-right: 1px solid var(--line);
+    gap: 16px;
+  }
+  .ring-wrap { position: relative; width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; }
+  .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--ring-color, var(--dormant));
+    animation: breathe var(--pulse-duration, 3.2s) ease-in-out infinite;
+  }
+  .ring.outer { opacity: 0.35; animation-delay: 0.15s; }
+  .core {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--ring-color, var(--dormant));
+    box-shadow: 0 0 24px var(--ring-color, transparent);
+    transition: background 0.6s ease, box-shadow 0.6s ease;
+  }
+  @keyframes breathe {
+    0%, 100% { transform: scale(0.88); opacity: 0.6; }
+    50% { transform: scale(1.15); opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ring { animation: none; }
+  }
+  .state-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .state-label.focused { color: var(--focused); }
+  .state-label.distracted { color: var(--distracted); }
+  .state-label.neutral { color: var(--muted); font-weight: 400; font-size: 13px; text-align: center; }
+
+  .readout { padding: 28px 28px; }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .k { color: var(--muted); font-size: 13px; }
+  .row .v { font-size: 15px; font-weight: 500; }
+
+  .chart-panel { margin-top: 16px; padding: 24px 28px 28px; }
+  .chart-label { color: var(--muted); font-size: 13px; margin-bottom: 14px; font-family: 'JetBrains Mono', monospace; }
+  canvas { max-height: 200px; }
+
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 20px; font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+const API_BASE = "http://localhost:8000"; // update if your backend runs elsewhere
+
+function App() {
+  const [predictState, setPredictState] = useState({ status: "loading" });
+  const [latestReadings, setLatestReadings] = useState([]);
+  const chartRef = useRef(null);
+  const chartInstance = useRef(null);
+
+  async function poll() {
+    try {
+      const p = await fetch(`${API_BASE}/predict`).then(r => r.json());
+      setPredictState(p);
+    } catch (e) {
+      setPredictState({ status: "error", message: "Can't reach backend. Is uvicorn running?" });
+    }
+    try {
+      const l = await fetch(`${API_BASE}/latest?n=30`).then(r => r.json());
+      setLatestReadings(l);
+    } catch (e) {}
+  }
+
+  useEffect(() => {
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!chartRef.current || latestReadings.length === 0) return;
+    const labels = latestReadings.map((_, i) => i);
+    const motion = latestReadings.map(r => parseFloat(r.accel_magnitude));
+    const sound = latestReadings.map(r => parseFloat(r.sound_raw));
+
+    if (chartInstance.current) {
+      chartInstance.current.data.labels = labels;
+      chartInstance.current.data.datasets[0].data = motion;
+      chartInstance.current.data.datasets[1].data = sound;
+      chartInstance.current.update();
+    } else {
+      chartInstance.current = new Chart(chartRef.current, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            { label: "Motion", data: motion, borderColor: "#4fb0a5", tension: 0.3, pointRadius: 0, borderWidth: 2 },
+            { label: "Sound", data: sound, borderColor: "#e8a33d", tension: 0.3, pointRadius: 0, borderWidth: 2, yAxisID: "y1" },
+          ],
+        },
+        options: {
+          responsive: true,
+          animation: { duration: 400 },
+          plugins: { legend: { labels: { color: "#8b93a1", font: { family: "JetBrains Mono", size: 11 } } } },
+          scales: {
+            x: { ticks: { display: false }, grid: { color: "#262d38" } },
+            y: { ticks: { color: "#8b93a1", font: { size: 10 } }, grid: { color: "#262d38" } },
+            y1: { position: "right", ticks: { color: "#8b93a1", font: { size: 10 } }, grid: { display: false } },
+          },
+        },
+      });
+    }
+  }, [latestReadings]);
+
+  let ringColor = "var(--dormant)";
+  let pulseDuration = "3.2s";
+  let stateLabelClass = "neutral";
+  let stateText = "—";
+
+  if (predictState.status === "ok") {
+    const focused = predictState.label === "focused";
+    ringColor = focused ? "var(--focused)" : "var(--distracted)";
+    pulseDuration = focused ? "3.6s" : "1.4s";
+    stateLabelClass = focused ? "focused" : "distracted";
+    stateText = predictState.label.toUpperCase();
+  } else {
+    const messages = {
+      no_model: "no model yet",
+      no_data: "no data yet",
+      insufficient_data: "warming up...",
+      error: "offline",
+      loading: "loading...",
+    };
+    stateText = messages[predictState.status] || "unknown";
+  }
+
+  return (
+    <div className="wrap">
+      <h1 className="title">FocusPulse</h1>
+      <div className="sub">Live focus inference from environmental and motion signals</div>
+
+      <div className="panel">
+        <div className="instrument">
+          <div className="vital" style={{ "--ring-color": ringColor, "--pulse-duration": pulseDuration }}>
+            <div className="ring-wrap">
+              <div className="ring outer"></div>
+              <div className="ring"></div>
+              <div className="core"></div>
+            </div>
+            <div className={`state-label ${stateLabelClass}`}>{stateText}</div>
+          </div>
+          <div className="readout">
+            <div className="row">
+              <span className="k">confidence</span>
+              <span className="v">{predictState.status === "ok" ? `${(predictState.confidence * 100).toFixed(0)}%` : "—"}</span>
+            </div>
+            <div className="row">
+              <span className="k">as of</span>
+              <span className="v">{predictState.status === "ok" ? new Date(predictState.as_of).toLocaleTimeString() : "—"}</span>
+            </div>
+            <div className="row">
+              <span className="k">window</span>
+              <span className="v">{predictState.status === "ok" ? `${predictState.window_seconds}s` : "—"}</span>
+            </div>
+            <div className="row">
+              <span className="k">samples</span>
+              <span className="v">{latestReadings.length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel chart-panel">
+        <div className="chart-label">sensor trend — last 30 samples</div>
+        <canvas ref={chartRef}></canvas>
+      </div>
+
+      <div className="footer-note">polling {API_BASE} every 5s</div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

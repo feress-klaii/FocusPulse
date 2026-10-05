@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "author": "Anonymous maker",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "wokwi-breadboard-half",
+      "id": "bb1",
+      "top": 72.9,
+      "left": -371.1,
+      "rotate": 90,
+      "attrs": {}
+    },
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-mpu6050", "id": "imu1", "top": -120.98, "left": -7.28, "attrs": {} },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr1",
+      "top": -150.4,
+      "left": -258.4,
+      "attrs": {}
+    },
+    { "type": "wokwi-gas-sensor", "id": "gas1", "top": -74.1, "left": -252.2, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "pot1", "top": 305.9, "left": -19.4, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "esp:3V3", "bb1:tp.1", "green", [ "h-119.81", "v19.2" ] ],
+    [ "esp:GND.1", "bb1:tn.11", "black", [ "h0" ] ],
+    [ "esp:5V", "bb1:18t.a", "red", [ "h0" ] ],
+    [ "imu1:VCC", "bb1:tp.2", "red", [ "v0" ] ],
+    [ "imu1:GND", "bb1:tn.1", "black", [ "v0" ] ],
+    [ "imu1:SCL", "esp:22", "green", [ "v0" ] ],
+    [ "imu1:SDA", "esp:21", "green", [ "v0" ] ],
+    [ "ldr1:VCC", "bb1:tp.3", "red", [ "h0" ] ],
+    [ "ldr1:GND", "bb1:tn.2", "black", [ "h0" ] ],
+    [ "ldr1:AO", "esp:34", "green", [ "h0" ] ],
+    [ "gas1:AOUT", "esp:35", "green", [ "h0" ] ],
+    [ "gas1:GND", "bb1:tn.3", "black", [ "h0" ] ],
+    [ "gas1:VCC", "bb1:tp.4", "red", [ "h0" ] ],
+    [ "pot1:VCC", "bb1:tp.23", "red", [ "v0" ] ],
+    [ "pot1:GND", "bb1:tn.24", "black", [ "v0" ] ],
+    [ "pot1:SIG", "esp:32", "green", [ "v0" ] ]
+  ]
+}
