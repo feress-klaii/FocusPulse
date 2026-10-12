@@ -11,7 +11,7 @@ Output: features.csv — one row per window, ready for model training.
 Usage: python feature_extraction.py
 """
 
-import csv
+import argparse
 import numpy as np
 import pandas as pd
 
@@ -22,9 +22,12 @@ OUTPUT_FILE = "features.csv"
 WINDOW_SECONDS = 15  # size of each rolling feature window
 
 
-def load_data():
-    sensors = pd.read_csv(SENSOR_LOG, parse_dates=["received_at"])
-    labels = pd.read_csv(LABELS_LOG, parse_dates=["timestamp_utc"])
+def load_data(sensor_path, labels_path):
+    sensors = pd.read_csv(sensor_path)
+    labels = pd.read_csv(labels_path)
+    # tolerate mixed timestamp formats (with / without microseconds)
+    sensors["received_at"] = pd.to_datetime(sensors["received_at"], utc=True, format="ISO8601")
+    labels["timestamp_utc"] = pd.to_datetime(labels["timestamp_utc"], utc=True, format="ISO8601")
     sensors = sensors.sort_values("received_at").reset_index(drop=True)
     labels = labels.sort_values("timestamp_utc").reset_index(drop=True)
     return sensors, labels
@@ -73,11 +76,9 @@ def compute_window_features(window: pd.DataFrame) -> dict:
     }
 
 
-def main():
-    sensors, labels = load_data()
+def extract_features(sensors: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFrame:
     if sensors.empty:
-        print("sensor_log.csv is empty — collect some data first.")
-        return
+        return pd.DataFrame()
 
     start = sensors["received_at"].min()
     end = sensors["received_at"].max()
@@ -94,9 +95,24 @@ def main():
             rows.append(features)
         t += window_delta
 
-    out = pd.DataFrame(rows)
-    out.to_csv(OUTPUT_FILE, index=False)
-    print(f"Wrote {len(out)} feature windows to {OUTPUT_FILE}")
+    return pd.DataFrame(rows)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sensors", default=SENSOR_LOG, help="raw sensor log CSV (default sensor_log.csv)")
+    parser.add_argument("--labels", default=LABELS_LOG, help="labels CSV (default labels.csv)")
+    parser.add_argument("--out", default=OUTPUT_FILE, help="output features CSV (default features.csv)")
+    args = parser.parse_args()
+
+    sensors, labels = load_data(args.sensors, args.labels)
+    if sensors.empty:
+        print(f"{args.sensors} is empty — collect some data first.")
+        return
+
+    out = extract_features(sensors, labels)
+    out.to_csv(args.out, index=False)
+    print(f"Wrote {len(out)} feature windows to {args.out}")
     if not labels.empty:
         print(out["label"].value_counts())
 
